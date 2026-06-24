@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- Standalone module - not part of the main Strata build.
+       Run `mvn install -DskipTests` in the project root first, then use
+       the scripts in this directory to build and run benchmarks. -->
+
+  <groupId>com.opengamma.strata.benchmarks</groupId>
+  <artifactId>strata-benchmarks</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+  <name>Strata Benchmarks</name>
+
+  <properties>
+    <strata.version>2.12.73-SNAPSHOT</strata.version>
+    <jmh.version>1.37</jmh.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- Default: release 11 so the same JAR runs on JDK 11 and JDK 25 -->
+    <maven.compiler.release>11</maven.compiler.release>
+    <!-- VectorApi source is excluded from the default build -->
+    <vectorapi.exclude>**/VectorApiDoubleArrayBenchmark.java</vectorapi.exclude>
+  </properties>
+
+  <dependencies>
+    <!-- Strata modules under test -->
+    <dependency>
+      <groupId>com.opengamma.strata</groupId>
+      <artifactId>strata-collect</artifactId>
+      <version>${strata.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.opengamma.strata</groupId>
+      <artifactId>strata-math</artifactId>
+      <version>${strata.version}</version>
+    </dependency>
+
+    <!-- JMH -->
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-core</artifactId>
+      <version>${jmh.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-generator-annprocess</artifactId>
+      <version>${jmh.version}</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <release>${maven.compiler.release}</release>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>org.openjdk.jmh</groupId>
+              <artifactId>jmh-generator-annprocess</artifactId>
+              <version>${jmh.version}</version>
+            </path>
+          </annotationProcessorPaths>
+          <excludes>
+            <exclude>${vectorapi.exclude}</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+
+      <!-- Skip regular unit tests - benchmarks are run via the fat JAR -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.5.2</version>
+        <configuration>
+          <skipTests>true</skipTests>
+        </configuration>
+      </plugin>
+
+      <!-- Fat JAR bundling all dependencies -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <finalName>benchmarks</finalName>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>org.openjdk.jmh.Main</mainClass>
+                </transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+              </transformers>
+              <filters>
+                <filter>
+                  <!-- Strip signatures from dependency JARs to avoid SecurityException -->
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                  </excludes>
+                </filter>
+              </filters>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <!-- ================================================================ -->
+  <profiles>
+    <!--
+      jdk25 profile: includes VectorApiDoubleArrayBenchmark, compiles to
+      release 25, and adds the incubator Vector API module.
+
+      Usage:
+        mvn clean package -Pjdk25
+        java -\-add-modules jdk.incubator.vector -jar target/benchmarks.jar VectorApi
+    -->
+    <profile>
+      <id>jdk25</id>
+      <properties>
+        <maven.compiler.release>25</maven.compiler.release>
+        <!-- Un-exclude the Vector API benchmark -->
+        <vectorapi.exclude>__nothing__</vectorapi.exclude>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+              <release>25</release>
+              <compilerArgs>
+                <arg>--add-modules</arg>
+                <arg>jdk.incubator.vector</arg>
+              </compilerArgs>
+              <excludes combine.self="override"/>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
+</project>
